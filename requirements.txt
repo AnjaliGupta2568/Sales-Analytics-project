@@ -1,0 +1,71 @@
+"""
+clean_data.py
+--------------
+Cleans the raw synthetic sales data and engineers features used by the
+dashboard and analysis notebook:
+
+  - Removes duplicate orders
+  - Handles missing values (imputation / row drop where appropriate)
+  - Normalises inconsistent text casing
+  - Removes invalid quantity entries
+  - Engineers `revenue`, `order_month`, `order_quarter`, `order_year`
+
+Run:
+    python src/clean_data.py
+Input:
+    data/raw_sales_data.csv
+Output:
+    data/cleaned_sales_data.csv
+"""
+
+import pandas as pd
+import numpy as np
+
+
+def load_data(path: str = "data/raw_sales_data.csv") -> pd.DataFrame:
+    return pd.read_csv(path, parse_dates=["order_date"])
+
+
+def clean(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    # 1. Drop exact duplicate rows
+    before = len(df)
+    df = df.drop_duplicates()
+    print(f"Removed {before - len(df):,} duplicate rows")
+
+    # 2. Normalise text casing
+    df["region"] = df["region"].str.title().str.strip()
+    df["product_category"] = df["product_category"].str.title().str.strip()
+
+    # 3. Remove invalid quantities (<= 0), a data-entry error in the source
+    before = len(df)
+    df = df[df["quantity"] > 0]
+    print(f"Removed {before - len(df):,} rows with invalid quantity")
+
+    # 4. Impute missing values
+    df["unit_price"] = df["unit_price"].fillna(df["unit_price"].median())
+    df["customer_rating"] = df["customer_rating"].fillna(df["customer_rating"].median())
+    df["payment_method"] = df["payment_method"].fillna("Unknown")
+
+    # 5. Outlier handling on unit_price using IQR capping
+    q1, q3 = df["unit_price"].quantile([0.25, 0.75])
+    iqr = q3 - q1
+    lower, upper = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+    df["unit_price"] = df["unit_price"].clip(lower=lower, upper=upper)
+
+    # 6. Feature engineering
+    df["revenue"] = df["quantity"] * df["unit_price"]
+    df["order_year"] = df["order_date"].dt.year
+    df["order_month"] = df["order_date"].dt.to_period("M").astype(str)
+    df["order_quarter"] = df["order_date"].dt.to_period("Q").astype(str)
+
+    df = df.reset_index(drop=True)
+    return df
+
+
+if __name__ == "__main__":
+    raw = load_data()
+    cleaned = clean(raw)
+    cleaned.to_csv("data/cleaned_sales_data.csv", index=False)
+    print(f"Saved {len(cleaned):,} cleaned rows -> data/cleaned_sales_data.csv")

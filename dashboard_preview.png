@@ -1,0 +1,71 @@
+"""
+analysis.py
+------------
+Computes the core business KPIs used in the dashboard and README:
+
+  - Monthly revenue trend
+  - Top product categories by revenue
+  - Regional sales performance
+  - Customer churn rate
+
+Run:
+    python src/analysis.py
+Input:
+    data/cleaned_sales_data.csv
+Output:
+    Prints a KPI summary to the console (used to sanity-check the dashboard numbers)
+"""
+
+import pandas as pd
+
+
+def load_clean_data(path: str = "data/cleaned_sales_data.csv") -> pd.DataFrame:
+    return pd.read_csv(path, parse_dates=["order_date"])
+
+
+def monthly_revenue_trend(df: pd.DataFrame) -> pd.DataFrame:
+    return (
+        df.groupby("order_month")["revenue"]
+        .sum()
+        .reset_index()
+        .sort_values("order_month")
+    )
+
+
+def top_categories(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
+    return (
+        df.groupby("product_category")["revenue"]
+        .sum()
+        .sort_values(ascending=False)
+        .head(n)
+        .reset_index()
+    )
+
+
+def regional_performance(df: pd.DataFrame) -> pd.DataFrame:
+    return (
+        df.groupby("region")
+        .agg(total_revenue=("revenue", "sum"), orders=("order_id", "count"))
+        .sort_values("total_revenue", ascending=False)
+        .reset_index()
+    )
+
+
+def churn_rate(df: pd.DataFrame) -> float:
+    unique_customers = df.drop_duplicates("customer_id")
+    return round(unique_customers["is_churned"].mean() * 100, 2)
+
+
+if __name__ == "__main__":
+    data = load_clean_data()
+
+    print("=== Monthly Revenue Trend (last 6 months) ===")
+    print(monthly_revenue_trend(data).tail(6).to_string(index=False))
+
+    print("\n=== Top Product Categories by Revenue ===")
+    print(top_categories(data).to_string(index=False))
+
+    print("\n=== Regional Sales Performance ===")
+    print(regional_performance(data).to_string(index=False))
+
+    print(f"\n=== Customer Churn Rate ===\n{churn_rate(data)}%")
